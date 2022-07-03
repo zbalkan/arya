@@ -7,36 +7,38 @@ import binascii
 import sys
 import base64
 from pathlib import Path
+from typing import Optional
 
 import colorama
 import yaramod as ym
 from xeger import Xeger
+from yaramod import Expression, HexString, IntLiteralExpression, String
 
 from file_mapper import FileMapper
 from ast_observer import YaraAstObserver
 
-
 class RuleReverser:
-    def __init__(self, input_path, output_path, is_recursive, add_pe_header, malware_file):
-        self._curr_indent = 0
-        self._file_mapper = FileMapper(add_pe_header, malware_file)
-        self._input_path = input_path
-        self._input_files_paths, self._rules_list = self.get_rules_list(self._input_path, is_recursive)
-        self._output_file_path = output_path
-        self.all_offsets = []
-        self.rules_names = []
+    def __init__(self, input_path : str, output_path : str, is_recursive : bool, add_pe_header : bool, malware_file : str) -> None:
+        self._curr_indent: int = 0
+        self._file_mapper : FileMapper = FileMapper(add_pe_header, malware_file)
+        self._input_path : str = os.path.abspath(input_path)
+        self._input_files_paths = self.get_input_file_list(self._input_path, is_recursive)
+        self._rules_list = self.get_rules_list(self._input_files_paths)
+        self._output_file_path : str = os.path.abspath(output_path)
+        self.all_offsets : list = []
+        self.rules_names : list = []
         self.print_row("[-] Starting Arya")
 
-    def increase_indent(self):
+    def increase_indent(self) -> None:
         self._curr_indent += 4
 
-    def decrease_indent(self):
+    def decrease_indent(self) -> None:
         self._curr_indent -= 4
 
-    def print_row(self, string):
+    def print_row(self, string : str) -> None:
         print((self._curr_indent * ' ') + string)
 
-    def _hex_string_to_bytes(self, string):
+    def _hex_string_to_bytes(self, string : HexString) -> bytes:
         ret_str = str(string.text)
 
         ret_str = ret_str.replace("{", "").replace("}", "") \
@@ -58,7 +60,7 @@ class RuleReverser:
 
         return binascii.unhexlify(ret_str)
 
-    def _yara_string_to_bytes(self, string):
+    def _yara_string_to_bytes(self, string : String) -> Optional[bytes]:
         if string.is_plain:
             if string.is_base64:
                 return base64.b64encode(string.pure_text)
@@ -76,7 +78,7 @@ class RuleReverser:
             if string.is_ascii:
                 return Xeger(limit=10).xeger(string.pure_text).encode("utf-8")
 
-    def _of_expr_to_string(self, count, iterable, string_mapping):
+    def _of_expr_to_string(self, count : IntLiteralExpression, iterable : Expression, string_mapping : dict) -> Optional[bytes]:
         if isinstance(iterable, ym.ThemExpression):
             strings = string_mapping
         elif isinstance(iterable, ym.SetExpression):
@@ -95,10 +97,9 @@ class RuleReverser:
 
         return b"".join([self._yara_string_to_bytes(val) for val in list(strings.values())][:amount])
 
-    def get_rules_list(self, path, is_recursive):
-        ymod_parser = ym.Yaramod()
-
+    def get_input_file_list(self, path : str, is_recursive : bool) -> list[str]:
         all_file_paths = []
+        path = os.path.abspath(path)
         if os.path.isdir(path):
             if is_recursive:
                 all_file_paths = [str(p) for p in list(Path(path).rglob("*.[yY][aA][rR]"))]
@@ -108,16 +109,19 @@ class RuleReverser:
                         all_file_paths.append(os.path.join(root, file))
         elif os.path.isfile(path):
             all_file_paths.append(path)
+        return all_file_paths
 
+    def get_rules_list(self, filePaths : list[str]) -> list:
+        ymod_parser = ym.Yaramod()
         all_yara_rules = []
-        for file_path in all_file_paths:
+        for file_path in filePaths:
             curr_yar_file = ymod_parser.parse_file(file_path)
             all_yara_rules.extend([(rule, file_path) for rule in curr_yar_file.rules])
 
         self.print_row(f"[-] Input file/directory {self._input_path}, found {len(all_yara_rules)} yara rules")
-        return all_file_paths, all_yara_rules
+        return all_yara_rules
 
-    def init_offset_list(self):
+    def init_offset_list(self) -> None:
         for rule, path in self._rules_list:
             ast_observer = YaraAstObserver(self._file_mapper)
             self.rules_names.append((rule.name, path))
@@ -136,7 +140,7 @@ class RuleReverser:
                     expr["var"] = self._yara_string_to_bytes(string_mapping[expr["var"]])
             self.all_offsets.extend(offsets_map)
 
-    def build_file_from_instructions(self):
+    def build_file_from_instructions(self) -> bytes:
         free_strings = b""
 
         self.print_row("[-] Building output file...")
@@ -168,11 +172,12 @@ class RuleReverser:
 
         return self._file_mapper.get_as_bytestream()
 
-    def test_yara(self, rules_path):
+    # Requires yara executables in environment variable PATH
+    def test_yara(self, rules_path : str) -> list[str]:
         yara_output = subprocess.run(['yara', rules_path, self._output_file_path], stdout=subprocess.PIPE).stdout.decode('utf-8')
         return [out.split(" ")[0] for out in yara_output.split("\n")]
 
-    def print_triggered_and_summary(self):
+    def print_triggered_and_summary(self) -> None:
         triggered_rules = []
         for in_path in self._input_files_paths:
             triggered_rules.extend([rule for rule in self.test_yara(in_path) if rule])
@@ -193,7 +198,7 @@ class RuleReverser:
 
         self.print_row("\n[-] Done.")
 
-def main():
+def main() -> None:
     colorama.init(autoreset=True)
     parser = argparse.ArgumentParser(
         description="Build a file that will trigger as much yara rules as possible from a given directory/file.")
