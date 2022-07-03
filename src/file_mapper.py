@@ -21,7 +21,7 @@ class FileMapper:
     def is_slice_reserved(self, start_index : int, end_index : int) -> bool:
         return all([True if place == "reserved" else False for place in self._byte_mapping[start_index:end_index]])
 
-    def place(self, byte_string : str, start_index : int, pre_reserved : bool =False) -> None:
+    def place(self, byte_string : bytes, start_index : int, pre_reserved : bool =False) -> None:
         end_index = start_index + len(byte_string)
         if self.is_slice_empty(start_index, end_index) or (pre_reserved and self.is_slice_reserved(start_index, end_index)):
             self._byte_mapping = self._byte_mapping[:start_index] + list(byte_string) + self._byte_mapping[end_index:]
@@ -61,7 +61,7 @@ class FileMapper:
     # 0:  89 ec                   mov    esp,ebp
     # 2:  5d                      pop    ebp
     # 3:  c3                      ret
-    def generate_random_x86_code(self, length : int) -> str:
+    def generate_random_x86_code(self, length : int) -> bytes:
         if self.get_malware_len() - PE_HEADER_OFFSET < length:
             start_index = random.randint(PE_HEADER_OFFSET, self.get_malware_len() - 1)
             mult = length // (self.get_malware_len() - start_index) + 1
@@ -73,9 +73,9 @@ class FileMapper:
         if length > 10:
             start = b"\x55\x89\xe5\x83\xec" + (4 * random.randint(1, 30)).to_bytes(1, byteorder="little", signed=True)
             end = b"\x89\xec\x5d\xc3"
-            return (start + malware_bytes[len(start):-1 * len(end)] + end).decode("utf-8")
+            return (start + malware_bytes[len(start):-1 * len(end)] + end)
         else:
-            return  malware_bytes.decode("utf-8")
+            return  malware_bytes
 
     def _get_none_mapping(self) -> list:
         is_prev_none = False
