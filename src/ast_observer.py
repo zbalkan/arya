@@ -1,25 +1,25 @@
+from typing import Any, Optional
 import yaramod as ym
-
+from yaramod import Expression
+from file_mapper import FileMapper
 
 class YaraAstObserver(ym.ObservingVisitor):
-    def __init__(self, file_mapper):
+    def __init__(self, file_mapper : FileMapper) -> None:
         super(YaraAstObserver, self).__init__()
-        self.strings_offsets_map = []
-        self.file_mapper = file_mapper
+        self.strings_offsets_map : list = []
+        self.file_mapper : FileMapper = file_mapper
 
-    def visit_StringExpression(self, expr):
+    def visit_StringExpression(self, expr : Expression) -> None:
         self._add_to_offset_map(expr.id, "String", "*", "*")
 
-    def visit_StringWildcardExpression(self, expr):
+    def visit_StringWildcardExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_StringAtExpression(self, expr):
-
+    def visit_StringAtExpression(self, expr : Expression) -> None:
         self._add_to_offset_map(expr.id, "at", expr.at_expr.get_text(), expr.at_expr.get_text())
-
         expr.at_expr.accept(self)
 
-    def visit_StringInRangeExpression(self, expr):
+    def visit_StringInRangeExpression(self, expr : Expression) -> None:
         low = expr.range_expr.low
         high = expr.range_expr.high
 
@@ -35,51 +35,51 @@ class YaraAstObserver(ym.ObservingVisitor):
         self._add_to_offset_map(expr.id, "in_range", low, high)
         expr.range_expr.accept(self)
 
-    def visit_StringCountExpression(self, expr):
+    def visit_StringCountExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_StringOffsetExpression(self, expr):
+    def visit_StringOffsetExpression(self, expr : Expression) -> None:
         if expr.index_expr:
             expr.index_expr.accept(self)
 
-    def visit_StringLengthExpression(self, expr):
+    def visit_StringLengthExpression(self, expr : Expression) -> None:
         if expr.index_expr:
             expr.index_expr.accept(self)
 
-    def visit_NotExpression(self, expr):
+    def visit_NotExpression(self, expr : Expression) -> None:
         expr.operand.accept(self)
 
-    def visit_UnaryMinusExpression(self, expr):
+    def visit_UnaryMinusExpression(self, expr : Expression) -> None:
         expr.operand.accept(self)
 
-    def visit_BitwiseNotExpression(self, expr):
+    def visit_BitwiseNotExpression(self, expr : Expression) -> None:
         expr.operand.accept(self)
 
-    def visit_AndExpression(self, expr):
+    def visit_AndExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_OrExpression(self, expr):
+    def visit_OrExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_LtExpression(self, expr):
+    def visit_LtExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_GtExpression(self, expr):
+    def visit_GtExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_LeExpression(self, expr):
+    def visit_LeExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_GeExpression(self, expr):
+    def visit_GeExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def helper_trigger_intfunc(self, func_name, func_arg, value):
+    def helper_trigger_intfunc(self, func_name : str, func_arg : Expression, value : int):
         signed = False if func_name.startswith("uint") else True
         byteorder = "big" if func_name.endswith("be") else "little"
         size_in_bytes = int(func_name.rstrip("be").lstrip("u").lstrip("int")) // 8
@@ -95,7 +95,9 @@ class YaraAstObserver(ym.ObservingVisitor):
             return next_functions_results\
                 + [(curr_resolve, "IntFunction", first_free_idx, first_free_idx + size_in_bytes)]
 
-    def helper_rotate_ptrs(self, offsets):
+    def helper_rotate_ptrs(self, offsets : Any) -> list:
+        type(offsets)
+
         offset_vars = [offset[0] for offset in offsets]
         offset_vars = offset_vars[1:] + offset_vars[:1]
         offsets_to_ret = []
@@ -104,13 +106,13 @@ class YaraAstObserver(ym.ObservingVisitor):
 
         return offsets_to_ret
 
-    def helper_add_int_functions(self, function, argument, value):
+    def helper_add_int_functions(self, function : str, argument : Any, value : int) -> None:
         offsets = self.helper_trigger_intfunc(function, argument, value)
         offsets = self.helper_rotate_ptrs(offsets)
         for curr_offset in offsets:
             self._add_to_offset_map(*curr_offset)
 
-    def visit_EqExpression(self, expr):
+    def visit_EqExpression(self, expr : Expression) -> None:
 
         if isinstance(expr.left_operand, ym.IntFunctionExpression) and isinstance(expr.right_operand, ym.IntLiteralExpression):
             self.helper_add_int_functions(expr.left_operand.function, expr.left_operand.argument, expr.right_operand.value)
@@ -120,147 +122,147 @@ class YaraAstObserver(ym.ObservingVisitor):
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_NeqExpression(self, expr):
+    def visit_NeqExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_ContainsExpression(self, expr):
+    def visit_ContainsExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_MatchesExpression(self, expr):
+    def visit_MatchesExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_PlusExpression(self, expr):
+    def visit_PlusExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_MinusExpression(self, expr):
+    def visit_MinusExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_MultiplyExpression(self, expr):
+    def visit_MultiplyExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_DivideExpression(self, expr):
+    def visit_DivideExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_ModuloExpression(self, expr):
+    def visit_ModuloExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_BitwiseXorExpression(self, expr):
+    def visit_BitwiseXorExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_BitwiseAndExpression(self, expr):
+    def visit_BitwiseAndExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_BitwiseOrExpression(self, expr):
+    def visit_BitwiseOrExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_ShiftLeftExpression(self, expr):
+    def visit_ShiftLeftExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_ShiftRightExpression(self, expr):
+    def visit_ShiftRightExpression(self, expr : Expression) -> None:
         expr.left_operand.accept(self)
         expr.right_operand.accept(self)
 
-    def visit_ForDictExpression(self, expr):
+    def visit_ForDictExpression(self, expr : Expression) -> None:
         expr.variable.accept(self)
         expr.iterable.accept(self)
         expr.body.accept(self)
 
-    def visit_ForArrayExpression(self, expr):
+    def visit_ForArrayExpression(self, expr : Expression) -> None:
         expr.variable.accept(self)
         expr.iterable.accept(self)
         expr.body.accept(self)
 
-    def visit_ForStringExpression(self, expr):
+    def visit_ForStringExpression(self, expr : Expression) -> None:
         expr.variable.accept(self)
         expr.iterable.accept(self)
         expr.body.accept(self)
 
-    def visit_OfExpression(self, expr):
+    def visit_OfExpression(self, expr : Expression) -> None:
         self._add_to_offset_map(None, 'of', expr.variable, expr.iterable)
 
         expr.variable.accept(self)
         expr.iterable.accept(self)
 
-    def visit_IteratorExpression(self, expr):
+    def visit_IteratorExpression(self, expr : Expression) -> None:
         for elem in expr.elements:
             elem.accept(self)
 
-    def visit_SetExpression(self, expr):
+    def visit_SetExpression(self, expr : Expression) -> None:
         for elem in expr.elements:
             elem.accept(self)
 
-    def visit_RangeExpression(self, expr):
+    def visit_RangeExpression(self, expr : Expression) -> None:
         expr.low.accept(self)
         expr.high.accept(self)
 
-    def visit_IdExpression(self, expr):
+    def visit_IdExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_StructAccessExpression(self, expr):
+    def visit_StructAccessExpression(self, expr : Expression) -> None:
         expr.structure.accept(self)
 
-    def visit_ArrayAccessExpression(self, expr):
+    def visit_ArrayAccessExpression(self, expr : Expression) -> None:
         expr.array.accept(self)
         expr.accessor.accept(self)
 
-    def visit_FunctionCallExpression(self, expr):
+    def visit_FunctionCallExpression(self, expr : Expression) -> None:
         expr.function.accept(self)
 
         for arg in expr.arguments:
             arg.accept(self)
 
-    def visit_BoolLiteralExpression(self, expr):
+    def visit_BoolLiteralExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_StringLiteralExpression(self, expr):
+    def visit_StringLiteralExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_IntLiteralExpression(self, expr):
+    def visit_IntLiteralExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_DoubleLiteralExpression(self, expr):
+    def visit_DoubleLiteralExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_FilesizeExpression(self, expr):
+    def visit_FilesizeExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_EntrypointExpression(self, expr):
+    def visit_EntrypointExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_AllExpression(self, expr):
+    def visit_AllExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_AnyExpression(self, expr):
+    def visit_AnyExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_NoneExpression(self, expr):
+    def visit_NoneExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_ThemExpression(self, expr):
+    def visit_ThemExpression(self, expr : Expression) -> None:
         pass
 
-    def visit_ParenthesesExpression(self, expr):
+    def visit_ParenthesesExpression(self, expr : Expression) -> None:
         expr.enclosed_expr.accept(self)
 
-    def visit_IntFunctionExpression(self, expr):
+    def visit_IntFunctionExpression(self, expr : Expression) -> None:
         expr.argument.accept(self)
 
-    def visit_RegexpExpression(self, expr):
+    def visit_RegexpExpression(self, expr : Expression) -> None:
         pass
 
-    def _add_to_offset_map(self, var, operation, min_offset, max_offset):
+    def _add_to_offset_map(self, var : Optional[str], operation : str, min_offset : Expression, max_offset : Expression) -> None:
         self.strings_offsets_map.append({"var": var,
                                          "operation": operation,
                                          "min_offset": min_offset,
